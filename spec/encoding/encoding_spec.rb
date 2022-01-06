@@ -338,4 +338,23 @@ describe "Yajl JSON encoder" do
       Yajl::Encoder.encode(root)
     }.to raise_error(Yajl::EncodeError)
   end
+
+  it "should encode the values from an enumerator as an array" do
+    expect(Yajl::Encoder.encode((1..3).each)).to eql("[1,2,3]")
+  end
+
+  it "should encode the values from a lazy enumerator as an array" do
+    expect(Yajl::Encoder.encode((1..3).each.lazy)).to eql("[1,2,3]")
+  end
+
+  it "should encode the values of an enumerator constructed with a method other than each" do
+    obj = Object.new
+    def obj.blah(x=0)
+      yield 1 + x
+      yield 2 + x
+      yield 3 + x
+    end
+    expect(Yajl::Encoder.encode(obj.to_enum(:blah))).to eql("[1,2,3]")
+    expect(Yajl::Encoder.encode(obj.to_enum(:blah).each(3))).to eql("[4,5,6]")
+  end
 end

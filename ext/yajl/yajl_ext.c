@@ -185,6 +185,17 @@ static int yajl_encode_part_hash_i(VALUE key, VALUE val, VALUE iter_v) {
     return ST_CONTINUE;
 }
 
+struct yajl_encode_each_iter {
+    void *w;
+    VALUE io;
+};
+
+VALUE yajl_encode_each_i(VALUE yielded_arg, VALUE callback_arg, int argc, const VALUE *argv, VALUE blockarg) {
+    struct yajl_encode_each_iter *iter = (struct yajl_encode_each_iter *)callback_arg;
+    yajl_encode_part(iter->w, yielded_arg, iter->io);
+    return Qnil;
+}
+
 #define CHECK_STATUS(call) \
     if ((status = (call)) != yajl_gen_status_ok) { break; }
 
@@ -268,7 +279,16 @@ void yajl_encode_part(void * wrapper, VALUE obj, VALUE io) {
             CHECK_STATUS(yajl_gen_string(w->encoder, (const unsigned char *)cptr, len));
             break;
         default:
-            if (rb_respond_to(obj, intern_to_json)) {
+            if (rb_obj_is_kind_of(obj, rb_cEnumerator)) {
+              CHECK_STATUS(yajl_gen_array_open(w->encoder));
+
+              struct yajl_encode_each_iter iter;
+              iter.w = w;
+              iter.io = io;
+              rb_block_call(obj, intern_each, 0, NULL, yajl_encode_each_i, (VALUE)&iter);
+
+              CHECK_STATUS(yajl_gen_array_close(w->encoder));
+            } else if (rb_respond_to(obj, intern_to_json)) {
                 str = rb_funcall(obj, intern_to_json, 0);
                 Check_Type(str, T_STRING);
                 cptr = RSTRING_PTR(str);
@@ -1388,6 +1408,7 @@ void Init_yajl() {
     intern_to_sym = rb_intern("to_sym");
     intern_has_key = rb_intern("has_key?");
     intern_as_json = rb_intern("as_json");
+    intern_each = rb_intern("each");
 
     sym_allow_comments = ID2SYM(rb_intern("allow_comments"));
     sym_check_utf8 = ID2SYM(rb_intern("check_utf8"));
